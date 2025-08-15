@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" 
+      xmlns:sec="http://www.thymeleaf.org/thymeleaf-extras-springsecurity5"
+      lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Personal Assistant System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <style>
+        html, body {
+            background-color: #f8f9fa;
+            overflow-x: hidden;
+        }
+        .sidebar {
+            position: fixed;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            z-index: 100;
+            padding: 48px 0 0;
+            box-shadow: inset -1px 0 0 rgba(0, 0, 0, .1);
+            background-color: #343a40;
+        }
+        .sidebar-sticky {
+            position: relative;
+            top: 0;
+            height: calc(100vh - 48px);
+            padding-top: 1rem;
+            overflow-x: hidden;
+            overflow-y: auto;
+        }
+        .sidebar .nav-link {
+            font-weight: 500;
+            color: #ced4da;
+            padding: 0.75rem 1rem;
+        }
+        .sidebar .nav-link:hover {
+            color: #fff;
+        }
+        .sidebar .nav-link.active {
+            color: #fff;
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+        .sidebar .nav-link i {
+            margin-right: 10px;
+        }
+        .main-content {
+            margin-left: 240px;
+            padding: 30px;
+        }
+        .navbar {
+            position: fixed;
+            top: 0;
+            right: 0;
+            left: 0;
+            z-index: 1030;
+            height: 48px;
+            padding-left: 240px;
+            background-color: #343a40;
+        }
+        .navbar-brand {
+            color: #fff;
+            font-weight: 600;
+        }
+        .card {
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        .card-header {
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+            font-weight: 600;
+        }
+        .dropdown-item i {
+            margin-right: 10px;
+        }
+        @media (max-width: 767.98px) {
+            .sidebar {
+                width: 100%;
+                height: auto;
+                position: relative;
+                padding: 0;
+            }
+            .main-content {
+                margin-left: 0;
+            }
+            .navbar {
+                padding-left: 0;
+            }
+        }
+        .main-card {
+            background: #fff !important;
+            border-radius: 20px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+            padding: 32px 0 32px 0;
+        }
+        /* 极简日历样式 */
+        #simple-calendar { max-width: 420px; margin: 0 auto; }
+        .sc-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .sc-table { width: 100%; border-collapse: collapse; }
+        .sc-table th, .sc-table td { width: 14.2%; height: 60px; text-align: center; vertical-align: top; position: relative; }
+        .sc-table th { background: #f8f9fa; font-weight: bold; }
+        .sc-today { background: #eaf6ff; border-radius: 50%; color: #007bff; font-weight: bold; }
+        .sc-dot { display: block; width: 7px; height: 7px; background: #dc3545; border-radius: 50%; margin: 2px auto 0 auto; }
+        .sc-date { cursor: pointer; display: inline-block; width: 32px; height: 32px; line-height: 32px; border-radius: 50%; transition: background 0.2s; }
+        .sc-date:hover { background: #e0e0e0; }
+        .sc-selected { background: #007bff; color: #fff; }
+        /* 日程弹窗样式 */
+        #sc-modal-bg { display: none; position: fixed; left:0; top:0; width:100vw; height:100vh; background:rgba(0,0,0,0.2); z-index: 999; }
+        #sc-modal { display: none; position: fixed; left: 50%; top: 50%; transform: translate(-50%,-50%); background: #fff; border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,0.15); padding: 24px 28px; min-width: 320px; z-index: 1000; }
+        #sc-modal h4 { margin-top: 0; }
+        #sc-modal ul { padding-left: 18px; }
+        #sc-modal li { margin-bottom: 6px; }
+        #sc-modal input[type=text] { width: 80%; margin-right: 6px; }
+        #sc-modal .sc-close { position: absolute; right: 12px; top: 8px; font-size: 1.3rem; color: #888; cursor: pointer; }
+        #sc-modal .sc-del { color: #dc3545; font-size: 0.95em; margin-left: 8px; cursor: pointer; }
+        #dashboardNotesContainer {
+            display: flex;
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            gap: 16px;
+            padding-bottom: 8px;
+            /* 恢复到最初横向滚动实现，不加大padding-right、不加last-child margin */
+        }
+        #dashboardNotesContainer .note-card {
+            min-width: 220px;
+            max-width: 260px;
+            flex: 0 0 auto;
+        }
+        /* 移除last-child margin-right和加大padding-right的代码 */
+        .sidebar .nav-link.active, .sidebar .nav-link:active {
+            background-color: transparent !important;
+            color: #fff !important;
+        }
+        .note-content {
+            font-family: 'Times New Roman', Times, serif;
+        }
+    </style>
+    <!-- FullCalendar依赖 -->
+    <link href='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/main.min.css' rel='stylesheet' />
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">Personal Assistant System</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNavDropdown">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse justify-content-end" id="navbarNavDropdown">
+                <ul class="navbar-nav">
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle text-white" href="#" id="navbarDropdownMenuLink" role="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-person-circle"></i> <span sec:authentication="name"></span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li>
+                                <form th:action="@{/logout}" method="post">
+                                    <button class="dropdown-item" type="submit"><i class="bi bi-box-arrow-right"></i> Logout</button>
+                                </form>
+                            </li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+    
+    <div class="container-fluid">
+        <div class="row">
+            <nav id="sidebarMenu" class="col-md-3 col-lg-2 d-md-block sidebar collapse show">
+                <div class="sidebar-sticky">
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link active" th:href="@{/dashboard}">
+                                <i class="bi bi-speedometer2"></i> Dashboard
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" th:href="@{/calendar}">
+                                <i class="bi bi-calendar3"></i> Calendar
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" th:href="@{/schedule}">
+                                <i class="bi bi-calendar3"></i> Schedule Management
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" th:href="@{/search}">
+                                <i class="bi bi-search"></i> Smart Search
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" th:href="@{/notebook}">
+                                <i class="bi bi-book"></i> Notebook
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" th:href="@{/weather}">
+                                <i class="bi bi-cloud-sun"></i> Weather Forecast
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" th:href="@{/convert/document-conversion}">
+                                <i class="bi bi-file-earmark-text"></i> Document Conversion
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" id="ai-translation-link">
+                                <i class="bi bi-translate"></i> AI Translation
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </nav>
+            
+            <main class="main-content">
+                <div class="container mt-4" style="max-width: 1600px; margin: 0 auto;">
+                    <!-- 欢迎标语卡片 -->
+                    <div class="main-card mb-4 text-center">
+                        <h2 style="font-weight:700;letter-spacing:1px;">
+                            Welcome back, <span th:text="${user != null && user.username != null ? user.username : 'User'}">User</span>!
+                        </h2>
+                        <p style="font-size:1.2rem;">
+                            Today is <span th:text="${#temporals.format(#temporals.createNow(), 'MMMM dd, yyyy (EEEE)', T(java.util.Locale).ENGLISH)}"></span>
+                        </p>
+                        <p style="font-size:1.1rem;">
+                            Wish you a wonderful day, smooth work, and a happy life!
+                        </p>
+                    </div>
+                    <!-- Note List Card -->
+                    <div class="card mb-4">
+                        <div class="card-header"><i class="bi bi-book"></i> Notes To Process</div>
+                        <div class="card-body">
+                            <div class="row" id="dashboardNotesContainer">
+                                <!-- Note cards will be loaded by JavaScript -->
+                            </div>
+                        </div>
+                    </div>
+                    <!-- AI Translation 区域 -->
+                    <div class="card mb-4" id="ai-translation-card" style="display:none;">
+                        <div class="card-header"><i class="bi bi-translate"></i> AI Translation</div>
+                        <div class="card-body">
+                            <form id="ai-translation-form" onsubmit="return false;">
+                                <div class="mb-3">
+                                    <label for="ai-translate-text" class="form-label">Text to translate</label>
+                                    <textarea class="form-control" id="ai-translate-text" rows="3" placeholder="Enter text..."></textarea>
+                                </div>
+                                <div class="mb-3 row">
+                                    <div class="col">
+                                        <label for="ai-source-lang" class="form-label">From</label>
+                                        <select class="form-select" id="ai-source-lang">
+                                            <option value="auto">Auto Detect</option>
+                                            <option value="en">English</option>
+                                            <option value="zh">Chinese</option>
+                                            <option value="ja">Japanese</option>
+                                            <option value="fr">French</option>
+                                            <option value="de">German</option>
+                                            <option value="es">Spanish</option>
+                                            <option value="ru">Russian</option>
+                                            <option value="ko">Korean</option>
+                                            <option value="ar">Arabic</option>
+                                            <option value="pt">Portuguese</option>
+                                            <option value="it">Italian</option>
+                                            <!-- 可扩展更多语言 -->
+                                        </select>
+                                    </div>
+                                    <div class="col">
+                                        <label for="ai-target-lang" class="form-label">To</label>
+                                        <select class="form-select" id="ai-target-lang">
+                                            <option value="en">English</option>
+                                            <option value="zh">Chinese</option>
+                                            <option value="ja">Japanese</option>
+                                            <option value="fr">French</option>
+                                            <option value="de">German</option>
+                                            <option value="es">Spanish</option>
+                                            <option value="ru">Russian</option>
+                                            <option value="ko">Korean</option>
+                                            <option value="ar">Arabic</option>
+                                            <option value="pt">Portuguese</option>
+                                            <option value="it">Italian</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <button class="btn btn-primary" id="ai-translate-btn">Translate</button>
+                            </form>
+                            <div class="mt-3">
+                                <label class="form-label">Result</label>
+                                <div id="ai-translate-result" style="min-height:2em;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/main.min.js"></script>
+    <script>
+        // 加载并渲染Note列表
+        function loadDashboardNotes() {
+            fetch('/api/notes')
+                .then(response => response.json())
+                .then(data => {
+                    renderDashboardNotes(data);
+                })
+                .catch(error => {
+                    document.getElementById('dashboardNotesContainer').innerHTML = '<div class="text-danger">Failed to load notes.</div>';
+                });
+        }
+        function renderDashboardNotes(notes) {
+            const container = document.getElementById('dashboardNotesContainer');
+            if (!notes || notes.length === 0) {
+                container.innerHTML = `<div class='col-12 text-center text-muted py-4'>No notes to process.</div>`;
+                return;
+            }
+            container.innerHTML = notes.map(note => `
+                <div class='col-12 col-sm-6 col-md-4 col-lg-2 mb-4 d-flex'>
+                    <div class='card note-card flex-fill' style='min-width:0; width:100%; max-width:220px; min-height:160px; border-radius:14px; display:flex; flex-direction:column; box-shadow:0 2px 8px rgba(0,0,0,0.06);'>
+                        <div class='card-body d-flex flex-column justify-content-between p-3' style='height:100%;'>
+                            <div>
+                                <h5 class='card-title note-title mb-2' style='font-size:1.02rem; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>${note.title || 'Untitled'}</h5>
+                                <div class='card-text note-content' style='font-size:0.97rem; color:#555; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:7; -webkit-box-orient:vertical; min-height:48px; max-height:120px;'>${note.content || ''}</div>
+                            </div>
+                            <div class='d-flex align-items-end mt-2' style='height:28px;'>
+                                <small class='note-date text-muted'><i class='bi bi-clock me-1'></i> ${formatNoteTime(note.createdAt)}</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+            }
+        // 时间友好显示
+        function formatNoteTime(dateStr) {
+            const date = new Date(dateStr);
+            const now = new Date();
+            const diff = (now - date) / 1000;
+            if (diff < 60) return 'just now';
+            if (diff < 3600) return Math.floor(diff/60) + ' min ago';
+            if (diff < 86400) return Math.floor(diff/3600) + ' hr ago';
+            if (now.getFullYear() === date.getFullYear()) {
+                return date.toLocaleString('en-US', { month: 'short', day: 'numeric' });
+            }
+            return date.toLocaleDateString();
+        }
+        document.addEventListener('DOMContentLoaded', loadDashboardNotes);
+    </script>
+    <script>
+        // AI Translation 菜单切换逻辑
+        document.getElementById('ai-translation-link').addEventListener('click', function() {
+            window.location.href = '/ai-translation';
+        });
+        // AI Translation 提交逻辑
+        document.getElementById('ai-translate-btn').addEventListener('click', async function() {
+            const text = document.getElementById('ai-translate-text').value.trim();
+            const from = document.getElementById('ai-source-lang').value;
+            const to = document.getElementById('ai-target-lang').value;
+            if(!text) { alert('Please enter text.'); return; }
+            document.getElementById('ai-translate-result').innerText = 'Translating...';
+            // 调用后端AI翻译接口
+            const res = await fetch('/api/ai/translate', {
+                            method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({text, from, to})
+            });
+            if(res.ok) {
+                const data = await res.json();
+                document.getElementById('ai-translate-result').innerText = data.result||'(No result)';
+                } else {
+                document.getElementById('ai-translate-result').innerText = 'Error!';
+            }
+                });
+    </script>
+</body>
+</html> 

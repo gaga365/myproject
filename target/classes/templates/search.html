@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Smart Search - Personal Assistant System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <style>
+        body { 
+            background-color: #f8f9fa;
+            min-height: 100vh;
+        }
+        .navbar {
+            background: linear-gradient(135deg, #00b4db, #0083b0);
+            padding: 1rem 2rem;
+        }
+        .navbar-brand {
+            color: white !important;
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+        .nav-link {
+            color: rgba(255, 255, 255, 0.9) !important;
+            margin: 0 10px;
+            transition: all 0.3s ease;
+        }
+        .nav-link:hover {
+            color: white !important;
+            transform: translateY(-2px);
+        }
+        .container { 
+            margin-top: 40px;
+            max-width: 800px;
+        }
+        .search-card {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .search-input {
+            border-radius: 25px;
+            padding: 15px 25px;
+            font-size: 1.1rem;
+            border: 2px solid #e9ecef;
+            transition: all 0.3s ease;
+        }
+        .search-input:focus {
+            border-color: #0d6efd;
+            box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+        }
+        .search-button {
+            border-radius: 25px;
+            padding: 15px 30px;
+            font-size: 1.1rem;
+        }
+        .result-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            display: none;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+        .loading-spinner {
+            width: 3rem;
+            height: 3rem;
+        }
+        .history-item {
+            cursor: pointer;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 5px;
+            transition: all 0.3s ease;
+        }
+        .history-item:hover {
+            background-color: #f8f9fa;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">Personal Assistant System</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/weather"><i class="bi bi-cloud-sun"></i> Weather</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/search"><i class="bi bi-search"></i> Smart Search</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="search-card">
+            <h2 class="text-center mb-4">Smart Search</h2>
+
+            <div class="input-group mb-3">
+                <input type="text" id="searchInput" class="form-control form-control-lg" placeholder="Enter your question..." autocomplete="off">
+                <button class="btn btn-primary search-button" id="searchButton">
+                    <i class="bi bi-search"></i> Search
+                </button>
+            </div>
+            
+            <div class="loading" id="loadingIndicator">
+                <div class="spinner-border loading-spinner text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-2">Thinking...</p>
+            </div>
+
+            <div class="result-card" id="resultCard">
+                <h5 class="mb-3">Search Result:</h5>
+                <div id="searchResult" class="mb-3" style="white-space: pre-wrap; line-height: 1.6;"></div>
+                <div class="mb-3">
+                    <button class="btn btn-success me-2" id="exportTxtBtn" style="display:none;">
+                        <i class="bi bi-download"></i> Export as txt
+                    </button>
+                    <button class="btn btn-info me-2" id="saveToNoteBtn" style="display:none;">
+                        <i class="bi bi-book"></i> Save to Notebook
+                    </button>
+                </div>
+                <div class="text-muted small" id="searchMetadata"></div>
+            </div>
+
+            <div class="mt-4" id="searchHistory">
+                <h5 class="mb-3">Search History</h5>
+                <div id="historyList"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Search history
+        let searchHistory = JSON.parse(localStorage.getItem('searchHistory') || '[]');
+        
+        function updateHistoryList() {
+            const historyList = document.getElementById('historyList');
+            historyList.innerHTML = searchHistory
+                .slice(-5) // Show only the last 5 records
+                .reverse()
+                .map(item => `
+                    <div class="history-item" data-query="${item}">
+                        <i class="bi bi-clock-history"></i> ${item}
+                    </div>
+                `).join('');
+
+            // Add click event listener for each history item
+            historyList.querySelectorAll('.history-item').forEach(itemElement => {
+                itemElement.addEventListener('click', () => {
+                    const query = itemElement.getAttribute('data-query');
+                    if (query) {
+                        useHistoryItem(query);
+                    }
+                });
+            });
+        }
+
+        function useHistoryItem(query) {
+            document.getElementById('searchInput').value = query;
+            performSearch();
+        }
+
+        // 导出为txt按钮逻辑
+        document.getElementById('exportTxtBtn').addEventListener('click', function() {
+            const content = document.getElementById('searchResult').innerText;
+            if (!content.trim()) {
+                alert('No content to export');
+                return;
+            }
+            fetch('/api/search/export', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: 'content=' + encodeURIComponent(content)
+            })
+            .then(response => response.blob())
+            .then(blob => {
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'search-result.txt';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+            });
+        });
+
+        // 搜索结果出现时显示导出按钮和保存到笔记按钮
+        function showExportBtn() {
+            document.getElementById('exportTxtBtn').style.display = 'inline-block';
+            document.getElementById('saveToNoteBtn').style.display = 'inline-block';
+        }
+
+        // 保存搜索结果到笔记
+        function saveToNote() {
+            const content = document.getElementById('searchResult').innerText;
+            const query = document.getElementById('searchInput').value.trim();
+            
+            if (!content.trim()) {
+                alert('No content to save');
+                return;
+            }
+
+            const title = `Search Result: ${query}`;
+            
+            fetch('/api/notes/save-search', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `title=${encodeURIComponent(title)}&content=${encodeURIComponent(content)}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert('Search result has been saved to notebook!');
+            })
+            .catch(error => {
+                console.error('Error saving to note:', error);
+                alert('Saving failed, please try again');
+            });
+        }
+
+        async function performSearch() {
+            const searchInput = document.getElementById('searchInput');
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            const resultCard = document.getElementById('resultCard');
+            const searchResult = document.getElementById('searchResult');
+            const searchMetadata = document.getElementById('searchMetadata');
+
+            if (!searchInput.value.trim()) {
+                alert('Please enter your question');
+                return;
+            }
+
+            // Add to history
+            const query = searchInput.value.trim();
+            if (!searchHistory.includes(query)) {
+                searchHistory.push(query);
+                localStorage.setItem('searchHistory', JSON.stringify(searchHistory));
+                updateHistoryList();
+            }
+
+            // Show loading
+            loadingIndicator.style.display = 'block';
+            resultCard.style.display = 'none';
+
+            try {
+                const response = await fetch('http://localhost:8081/api/search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        query: query
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Search request failed');
+                }
+                
+                // Show result
+                if (data.response && Array.isArray(data.response) && data.response.length > 0) {
+                    const message = data.response[0].message;
+                    if (message && message.content) {
+                        searchResult.innerHTML = message.content;
+                    } else {
+                        throw new Error('Invalid response format');
+                    }
+                } else {
+                    throw new Error('No relevant results found');
+                }
+                searchMetadata.innerHTML = `Search time: ${new Date().toLocaleString()}`;
+                resultCard.style.display = 'block';
+                showExportBtn();
+            } catch (error) {
+                console.error('Search error:', error);
+                searchResult.innerHTML = `<div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle"></i> 
+                    ${error.message || 'An error occurred during the search, please try again later.'}
+                </div>`;
+                resultCard.style.display = 'block';
+            } finally {
+                loadingIndicator.style.display = 'none';
+            }
+        }
+
+        // On page load, focus input and show history
+        document.addEventListener('DOMContentLoaded', () => {
+            const searchInput = document.getElementById('searchInput');
+            const searchButton = document.getElementById('searchButton');
+            
+            // Add click event for search button
+            searchButton.addEventListener('click', performSearch);
+
+            // Add Enter key event for input
+            searchInput.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') {
+                    performSearch();
+                }
+            });
+
+            // Add click event for save to note button
+            document.getElementById('saveToNoteBtn').addEventListener('click', saveToNote);
+
+            searchInput.focus();
+            updateHistoryList();
+        });
+    </script>
+</body>
+</html> 

@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notebook - Personal Assistant System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.snow.css" rel="stylesheet">
+    <style>
+        body {
+            background: #f8f9fa;
+        }
+        .main-content {
+            background: #fff;
+            min-height: 90vh;
+            border-radius: 18px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+            margin: 40px auto;
+            padding: 40px 48px 48px 48px;
+            max-width: 1100px;
+        }
+        .note-card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+            border: none;
+        }
+        .note-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        }
+        .note-title {
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        .note-content {
+            color: #6c757d;
+            line-height: 1.6;
+            min-height: 60px;
+            font-family: 'Times New Roman', Times, serif;
+        }
+        .note-date {
+            font-size: 0.85rem;
+            color: #adb5bd;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 8px;
+            padding: 10px 20px;
+        }
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        .search-box {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+        .modal-content {
+            border-radius: 12px;
+            border: none;
+        }
+        .form-control, .form-select {
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+        }
+        .form-control:focus, .form-select:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+        }
+        .ql-toolbar.ql-snow { border-radius: 8px 8px 0 0; }
+        .ql-container.ql-snow { border-radius: 0 0 8px 8px; min-height: 180px; }
+    </style>
+</head>
+<body>
+    <div class="main-content">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2><i class="fas fa-book me-2"></i>Notebook</h2>
+            <button class="btn btn-primary" onclick="openCreateModal()">
+                <i class="fas fa-plus me-2"></i>New Note
+            </button>
+        </div>
+
+        <!-- Search box (no history, no dropdown) -->
+        <div class="search-box">
+            <div class="row">
+                <div class="col-md-8">
+                    <input type="text" class="form-control" id="searchInput" placeholder="Search note title or content..." autocomplete="off">
+                </div>
+                <div class="col-md-4">
+                    <button class="btn btn-primary w-100" onclick="searchNotes()">
+                        <i class="fas fa-search me-2"></i>Search
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Note list -->
+        <div class="row" id="notesContainer">
+            <!-- Note cards will be loaded by JavaScript -->
+        </div>
+    </div>
+
+    <!-- New/Edit Note Modal -->
+    <div class="modal fade" id="noteModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalTitle">New Note</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="noteForm" onsubmit="return false;">
+                        <input type="hidden" id="noteId">
+                        <div class="mb-3">
+                            <label for="noteTitle" class="form-label">Title</label>
+                            <input type="text" class="form-control" id="noteTitle" required autocomplete="off">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Content (support paste screenshot)</label>
+                            <div id="quillEditor"></div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="saveNote()">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.min.js"></script>
+    <script>
+        let notes = [];
+        let isEditing = false;
+        let quill;
+
+        // Initialize Quill editor when modal opens
+        function initQuill(contentHtml) {
+            if (quill) {
+                quill.root.innerHTML = contentHtml || '';
+                return;
+            }
+            quill = new Quill('#quillEditor', {
+                theme: 'snow',
+                placeholder: 'Paste screenshot or type here...',
+                modules: {
+                    toolbar: [
+                        [{ 'header': [1, 2, false] }],
+                        ['bold', 'italic', 'underline', 'strike'],
+                        ['blockquote', 'code-block'],
+                        [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+                        [{ 'align': [] }],
+                        ['link', 'image'],
+                        ['clean']
+                    ]
+                }
+            });
+            if (contentHtml) quill.root.innerHTML = contentHtml;
+        }
+
+        // Load notes on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadNotes();
+        });
+
+        // Load notes list
+        function loadNotes() {
+            fetch('/api/notes')
+                .then(response => response.json())
+                .then(data => {
+                    notes = data;
+                    renderNotes();
+                })
+                .catch(error => {
+                    console.error('Error loading notes:', error);
+                    alert('Failed to load notes');
+                });
+        }
+
+        // Render notes list
+        function renderNotes() {
+            const container = document.getElementById('notesContainer');
+            if (notes.length === 0) {
+                container.innerHTML = `
+                    <div class="col-12 text-center py-5">
+                        <i class="fas fa-book fa-3x text-muted mb-3"></i>
+                        <h5 class="text-muted">No notes yet</h5>
+                        <p class="text-muted">Click \"New Note\" to start writing</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = notes.map(note => `
+                <div class="col-md-6 col-lg-4 mb-4">
+                    <div class="card note-card h-100">
+                        <div class="card-body">
+                            <h5 class="card-title note-title">${note.title}</h5>
+                            <div class="card-text note-content" style="overflow:auto;max-height:120px;">${note.content || ''}</div>
+                            <div class="d-flex justify-content-between align-items-center mt-2">
+                                <small class="note-date">
+                                    <i class="fas fa-clock me-1"></i>
+                                    ${new Date(note.createdAt).toLocaleString()}
+                                </small>
+                                <div class="btn-group">
+                                    <button class="btn btn-sm btn-outline-primary" onclick="editNote(${note.id})">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="deleteNote(${note.id})">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Search notes
+        function searchNotes() {
+            const keyword = document.getElementById('searchInput').value.trim();
+            if (keyword === '') {
+                loadNotes();
+                return;
+            }
+            fetch(`/api/notes/search?keyword=${encodeURIComponent(keyword)}`)
+                .then(response => response.json())
+                .then(data => {
+                    notes = data;
+                    renderNotes();
+                })
+                .catch(error => {
+                    console.error('Error searching notes:', error);
+                    alert('Search failed');
+                });
+        }
+
+        // Open new note modal
+        function openCreateModal() {
+            isEditing = false;
+            document.getElementById('modalTitle').textContent = 'New Note';
+            document.getElementById('noteId').value = '';
+            document.getElementById('noteTitle').value = '';
+            setTimeout(() => initQuill(''), 100); // 初始化Quill
+            new bootstrap.Modal(document.getElementById('noteModal')).show();
+        }
+
+        // Edit note
+        function editNote(id) {
+            const note = notes.find(n => n.id === id);
+            if (note) {
+                isEditing = true;
+                document.getElementById('modalTitle').textContent = 'Edit Note';
+                document.getElementById('noteId').value = note.id;
+                document.getElementById('noteTitle').value = note.title;
+                setTimeout(() => initQuill(note.content || ''), 100);
+                new bootstrap.Modal(document.getElementById('noteModal')).show();
+            }
+        }
+
+        // Save note
+        function saveNote() {
+            const title = document.getElementById('noteTitle').value.trim();
+            const content = quill.root.innerHTML;
+            if (!title || !content || content === '<p><br></p>') {
+                alert('Please enter title and content');
+                return;
+            }
+            const noteData = {
+                title: title,
+                content: content
+            };
+            const url = isEditing ? `/api/notes/${document.getElementById('noteId').value}` : '/api/notes';
+            const method = isEditing ? 'PUT' : 'POST';
+            fetch(url, {
+                method: method,
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(noteData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                bootstrap.Modal.getInstance(document.getElementById('noteModal')).hide();
+                loadNotes();
+                alert(isEditing ? 'Note updated successfully' : 'Note created successfully');
+            })
+            .catch(error => {
+                console.error('Error saving note:', error);
+                alert('Save failed');
+            });
+        }
+
+        // Delete note
+        function deleteNote(id) {
+            if (confirm('Are you sure you want to delete this note?')) {
+                fetch(`/api/notes/${id}`, {
+                    method: 'DELETE'
+                })
+                .then(response => {
+                    if (response.ok) {
+                        loadNotes();
+                        alert('Note deleted successfully');
+                    } else {
+                        alert('Delete failed');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error deleting note:', error);
+                    alert('Delete failed');
+                });
+            }
+        }
+
+        // Press Enter to search
+        document.getElementById('searchInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                searchNotes();
+            }
+        });
+    </script>
+</body>
+</html> 

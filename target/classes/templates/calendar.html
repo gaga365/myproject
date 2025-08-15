@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Calendar - Personal Assistant System</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <style>
+        body { background: #f8f9fa; }
+        .calendar-container {
+            max-width: 600px;
+            margin: 40px auto 0 auto;
+            background: #fff;
+            border-radius: 18px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+            padding: 32px 24px 32px 24px;
+        }
+        .calendar-title {
+            font-size: 2rem;
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 24px;
+        }
+        #simple-calendar { max-width: 400px; margin: 0 auto; }
+        .sc-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .sc-table { width: 100%; border-collapse: collapse; }
+        .sc-table th, .sc-table td { width: 14.2%; height: 60px; text-align: center; vertical-align: top; position: relative; font-size: 1rem; }
+        .sc-table th { background: #f8f9fa; font-weight: bold; font-size: 1rem; }
+        .sc-today { background: #eaf6ff; border-radius: 50%; color: #007bff; font-weight: bold; font-size: 1rem; }
+        .sc-dot { display: block; width: 7px; height: 7px; background: #dc3545; border-radius: 50%; margin: 2px auto 0 auto; }
+        .sc-date { cursor: pointer; display: inline-block; width: 32px; height: 32px; line-height: 32px; border-radius: 50%; transition: background 0.2s; font-size: 1rem; }
+        .sc-date:hover { background: #e0e0e0; }
+        .sc-selected { background: #007bff; color: #fff; }
+        /* 日程弹窗样式 */
+        #sc-modal-bg { display: none; position: fixed; left:0; top:0; width:100vw; height:100vh; background:rgba(0,0,0,0.2); z-index: 999; }
+        #sc-modal { display: none; position: fixed; left: 50%; top: 50%; transform: translate(-50%,-50%); background: #fff; border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,0.15); padding: 24px 28px; min-width: 320px; z-index: 1000; }
+        #sc-modal h4 { margin-top: 0; }
+        #sc-modal ul { padding-left: 18px; }
+        #sc-modal li { margin-bottom: 6px; }
+        #sc-modal input[type=text], #sc-modal input[type=time] { width: 45%; margin-right: 6px; }
+        #sc-modal .sc-close { position: absolute; right: 12px; top: 8px; font-size: 1.3rem; color: #888; cursor: pointer; }
+        #sc-modal .sc-del { color: #dc3545; font-size: 0.95em; margin-left: 8px; cursor: pointer; }
+    </style>
+</head>
+<body>
+<div class="calendar-container">
+    <div class="calendar-title">
+        <i class="bi bi-calendar3"></i> Calendar
+    </div>
+    <div id="simple-calendar"></div>
+</div>
+<!-- 日程弹窗 -->
+<div id="sc-modal-bg"></div>
+<div id="sc-modal">
+    <span class="sc-close" onclick="scHideModal()">&times;</span>
+    <h4 id="sc-modal-title">Schedule</h4>
+    <ul id="sc-modal-list"></ul>
+    <form id="sc-add-form" class="d-flex mb-2 flex-column" onsubmit="return scAddEvent();">
+        <input type="text" id="sc-add-title" placeholder="Title" required maxlength="50" class="mb-2" autocomplete="off">
+        <input type="text" id="sc-add-content" placeholder="Content" required maxlength="200" class="mb-2" autocomplete="off">
+        <button type="submit" class="btn btn-primary btn-sm align-self-end">Add</button>
+    </form>
+</div>
+<script>
+    // 日历+日程联动
+    const calendarEl = document.getElementById('simple-calendar');
+    let today = new Date();
+    let currentYear = today.getFullYear();
+    let currentMonth = today.getMonth();
+    let scheduleMap = {}; // { 'yyyy-MM-dd': [ {id, time, text}, ... ] }
+    let scSelectedDate = null;
+
+    async function fetchMonthSchedules(year, month) {
+        const ym = `${year}-${(month+1).toString().padStart(2,'0')}`;
+        const res = await fetch(`/api/schedule?month=${ym}`);
+        const arr = await res.json();
+        scheduleMap = {};
+        for(const ev of arr) {
+            const d = ev.date;
+            if(!scheduleMap[d]) scheduleMap[d]=[];
+            scheduleMap[d].push(ev);
+        }
+    }
+    function hasSchedule(y, m, d) {
+        const key = `${y}-${(m+1).toString().padStart(2,'0')}-${d.toString().padStart(2,'0')}`;
+        return scheduleMap[key] && scheduleMap[key].length>0;
+    }
+    function getSchedules(y, m, d) {
+        const key = `${y}-${(m+1).toString().padStart(2,'0')}-${d.toString().padStart(2,'0')}`;
+        return scheduleMap[key]||[];
+    }
+    async function renderCalendar(year, month) {
+        await fetchMonthSchedules(year, month);
+        const firstDay = new Date(year, month, 1);
+        const lastDay = new Date(year, month + 1, 0);
+        let html = '';
+        html += '<div class="sc-header">';
+        html += `<button class="btn btn-outline-secondary btn-sm" onclick="changeMonth(-1)">&lt;</button>`;
+        html += `<span style="font-weight:600;font-size:1.2rem;">${year}年${month+1}月</span>`;
+        html += `<button class="btn btn-outline-secondary btn-sm" onclick="changeMonth(1)">&gt;</button>`;
+        html += '</div>';
+        html += '<table class="sc-table">';
+        html += '<thead><tr>';
+        ['Su','Mo','Tu','We','Th','Fr','Sa'].forEach(d=>{ html += `<th>${d}</th>`; });
+        html += '</tr></thead><tbody><tr>';
+        let dayOfWeek = firstDay.getDay();
+        for(let i=0;i<dayOfWeek;i++) html += '<td></td>';
+        for(let d=1;d<=lastDay.getDate();d++) {
+            if((dayOfWeek+d-1)%7===0 && d!==1) html += '</tr><tr>';
+            let isToday = year===today.getFullYear() && month===today.getMonth() && d===today.getDate();
+            html += `<td>`;
+            html += `<span class="sc-date${isToday?' sc-today':''}" onclick="scShowModal(${year},${month},${d})">${d}</span>`;
+            if(hasSchedule(year, month, d)) html += '<span class="sc-dot"></span>';
+            html += `</td>`;
+        }
+        html += '</tr></tbody></table>';
+        calendarEl.innerHTML = html;
+    }
+    function changeMonth(offset) {
+        currentMonth += offset;
+        if(currentMonth<0) { currentMonth=11; currentYear--; }
+        if(currentMonth>11) { currentMonth=0; currentYear++; }
+        renderCalendar(currentYear, currentMonth);
+    }
+    // 日程弹窗逻辑
+    function scShowModal(y, m, d) {
+        scSelectedDate = {y, m, d};
+        document.getElementById('sc-modal-title').textContent = `Schedule for ${y}-${(m+1).toString().padStart(2,'0')}-${d.toString().padStart(2,'0')}`;
+        scRenderModalList();
+        document.getElementById('sc-modal-bg').style.display = 'block';
+        document.getElementById('sc-modal').style.display = 'block';
+    }
+    function scHideModal() {
+        document.getElementById('sc-modal-bg').style.display = 'none';
+        document.getElementById('sc-modal').style.display = 'none';
+        scSelectedDate = null;
+    }
+    function scRenderModalList() {
+        const ul = document.getElementById('sc-modal-list');
+        if(!scSelectedDate) return;
+        const {y, m, d} = scSelectedDate;
+        const list = getSchedules(y, m, d);
+        ul.innerHTML = list.length===0 ? '<li class="text-muted">No schedule</li>' :
+            list.map(ev => `<li><strong>${ev.title||''}</strong><br><span>${ev.content||''}</span><span class="sc-del" onclick="scDeleteEvent('${ev.id}')">&times;</span></li>`).join('');
+    }
+    async function scAddEvent() {
+        const title = document.getElementById('sc-add-title').value.trim();
+        const content = document.getElementById('sc-add-content').value.trim();
+        if(!title || !content) return false;
+        const {y, m, d} = scSelectedDate;
+        const date = `${y}-${(m+1).toString().padStart(2,'0')}-${d.toString().padStart(2,'0')}`;
+        await fetch('/api/schedule', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({title, content, date})
+        });
+        document.getElementById('sc-add-title').value = '';
+        document.getElementById('sc-add-content').value = '';
+        await renderCalendar(currentYear, currentMonth);
+        scShowModal(y, m, d);
+        return false;
+    }
+    async function scDeleteEvent(id) {
+        await fetch(`/api/schedule/${id}`, {method:'DELETE'});
+        await renderCalendar(currentYear, currentMonth);
+        if(scSelectedDate) scShowModal(scSelectedDate.y, scSelectedDate.m, scSelectedDate.d);
+    }
+    window.onload = function() {
+        renderCalendar(currentYear, currentMonth);
+    };
+</script>
+</body>
+</html> 
